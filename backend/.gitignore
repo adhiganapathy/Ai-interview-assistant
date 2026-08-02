@@ -1,0 +1,11 @@
+# Python / Virtual Environment
+venv/
+interview-env/
+__pycache__/
+*.pyc
+.env
+
+# Node / React
+node_modules/
+dist/
+.DS_Store
