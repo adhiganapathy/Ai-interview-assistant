@@ -181,3 +181,7 @@ def evaluate_candidate(session_id: int, req: FeedbackRequest, db: Session = Depe
         transcripts=req.transcripts
     )
     return feedback
+
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "AI Interview Assistant API is running!"}
