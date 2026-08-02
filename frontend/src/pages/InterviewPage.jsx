@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Mic, Square, User, ArrowRight, RefreshCw, CheckCircle2, Award, TrendingUp, Check, AlertCircle } from 'lucide-react';
+import { Mic, Square, User, ArrowRight, RefreshCw, CheckCircle2 } from 'lucide-react';
+
+// 🌐 Production Deployed Base URL
+const API_BASE_URL = 'https://ai-interview-assistant-xr8k.onrender.com';
+const WS_BASE_URL = 'wss://ai-interview-assistant-xr8k.onrender.com';
 
 export default function InterviewPage({ sessionId }) {
   const [isRecording, setIsRecording] = useState(false);
@@ -14,6 +18,7 @@ export default function InterviewPage({ sessionId }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
+  const [preloadedQuestion, setPreloadedQuestion] = useState(null);
 
   const socketRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -34,7 +39,8 @@ export default function InterviewPage({ sessionId }) {
   useEffect(() => {
     fetchNextQuestion('', []);
 
-    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/transcribe/${sessionId}`);
+    // 🔒 Secure WSS Connection for Deployed Backend
+    const ws = new WebSocket(`${WS_BASE_URL}/ws/transcribe/${sessionId}`);
     ws.onopen = () => console.log('WebSocket connected for live streaming');
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -54,7 +60,7 @@ export default function InterviewPage({ sessionId }) {
   const fetchNextQuestion = async (lastTranscript, currentAsked = askedQuestions) => {
     setLoadingQuestion(true);
     try {
-      const res = await axios.post(`http://127.0.0.1:8000/api/sessions/${sessionId}/next-question`, {
+      const res = await axios.post(`${API_BASE_URL}/api/sessions/${sessionId}/next-question`, {
         previous_transcript: lastTranscript,
         asked_questions: currentAsked
       });
@@ -76,11 +82,10 @@ export default function InterviewPage({ sessionId }) {
     setSavedTranscripts(updatedTranscripts);
 
     if (askedQuestions.length >= MAX_QUESTIONS) {
-      // Completed 7 questions -> Generate Candidate Dashboard
       setIsCompleted(true);
       setEvaluating(true);
       try {
-        const res = await axios.post(`http://127.0.0.1:8000/api/sessions/${sessionId}/evaluate`, {
+        const res = await axios.post(`${API_BASE_URL}/api/sessions/${sessionId}/evaluate`, {
           asked_questions: askedQuestions,
           transcripts: updatedTranscripts
         });
@@ -91,8 +96,16 @@ export default function InterviewPage({ sessionId }) {
         setEvaluating(false);
       }
     } else {
-      setTranscript('');
-      fetchNextQuestion(transcript, askedQuestions);
+      if (preloadedQuestion) {
+        setQuestion(preloadedQuestion);
+        setAskedQuestions((prev) => [...prev, preloadedQuestion]);
+        speakQuestion(preloadedQuestion);
+        setPreloadedQuestion(null);
+        setTranscript('');
+      } else {
+        setTranscript('');
+        fetchNextQuestion(transcript, askedQuestions);
+      }
     }
   };
 
@@ -124,13 +137,26 @@ export default function InterviewPage({ sessionId }) {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     setIsRecording(false);
+
+    // ⚡ Pre-fetch next question in background right when recording stops
+    if (askedQuestions.length < MAX_QUESTIONS) {
+      try {
+        const res = await axios.post(`${API_BASE_URL}/api/sessions/${sessionId}/next-question`, {
+          previous_transcript: transcript,
+          asked_questions: askedQuestions
+        });
+        setPreloadedQuestion(res.data.question);
+      } catch (err) {
+        console.error("Pre-fetch error:", err);
+      }
+    }
   };
 
   const formatTime = (secs) => {
@@ -184,8 +210,6 @@ export default function InterviewPage({ sessionId }) {
             </div>
           ) : feedback ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              
-              {/* Score Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                 <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '16px', textAlign: 'center' }}>
                   <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>OVERALL SCORE</span>
@@ -207,13 +231,11 @@ export default function InterviewPage({ sessionId }) {
                 </div>
               </div>
 
-              {/* AI Summary */}
               <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '16px' }}>
                 <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', color: '#f8fafc' }}>Recruiter Summary</h3>
                 <p style={{ margin: 0, fontSize: '14px', color: '#cbd5e1', lineHeight: '1.6' }}>{feedback.summary}</p>
               </div>
 
-              {/* Strengths & Improvements */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div style={{ backgroundColor: '#1e293b', padding: '20px', borderRadius: '16px' }}>
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#34d399' }}>Key Strengths</h4>
@@ -246,7 +268,28 @@ export default function InterviewPage({ sessionId }) {
                 Start New Interview Practice
               </button>
             </div>
-          ) : null}
+          ) : (
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <p style={{ color: '#f87171', fontSize: '15px', fontWeight: '600' }}>
+                Failed to load feedback evaluation.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  marginTop: '12px'
+                }}
+              >
+                Try Again
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -274,7 +317,6 @@ export default function InterviewPage({ sessionId }) {
         border: '1px solid rgba(255,255,255,0.1)'
       }}>
         
-        {/* Top Header Bar */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -314,12 +356,9 @@ export default function InterviewPage({ sessionId }) {
           </div>
         </div>
 
-        {/* Main Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '20px' }}>
-          
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             
-            {/* AI Speech Bubble */}
             <div style={{
               backgroundColor: '#ffffff',
               color: '#0f172a',
@@ -338,7 +377,6 @@ export default function InterviewPage({ sessionId }) {
               </p>
             </div>
 
-            {/* Controls */}
             <div style={{
               backgroundColor: '#1e293b',
               padding: '16px',
@@ -400,7 +438,6 @@ export default function InterviewPage({ sessionId }) {
               </div>
             </div>
 
-            {/* Transcript Box */}
             <div style={{
               backgroundColor: '#1e293b',
               padding: '18px',
@@ -445,7 +482,6 @@ export default function InterviewPage({ sessionId }) {
             </div>
           </div>
 
-          {/* Right Column */}
           <div style={{
             backgroundColor: '#1e293b',
             padding: '20px',
@@ -478,7 +514,6 @@ export default function InterviewPage({ sessionId }) {
               Groq Llama 3.3 Evaluation Engine
             </div>
           </div>
-
         </div>
 
       </div>
