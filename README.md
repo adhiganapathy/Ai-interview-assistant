@@ -6,7 +6,7 @@ An end-to-end, real-time AI-powered interview platform designed to conduct struc
 
 ## 🚀 Live Demo & Links
 
-- **Live Application:** [https://your-frontend-app.vercel.app](https://your-frontend-app.vercel.app)
+- **Live Application:** ([https://your-frontend-app.vercel.app](https://ai-interview-assistant-lime.vercel.app/))
 - **Backend API & Swagger Docs:** [https://ai-interview-assistant-xr8k.onrender.com/docs](https://ai-interview-assistant-xr8k.onrender.com/docs)
 - **GitHub Repository:** [https://github.com/adhiganapathy/Ai-interview-assistant](https://github.com/adhiganapathy/Ai-interview-assistant)
 
